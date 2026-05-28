@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -36,6 +37,53 @@ func TestLoad_FileNotFound(t *testing.T) {
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("want not-exist error, got %v", err)
+	}
+}
+
+func TestLoad_RejectsNonHTTPScheme(t *testing.T) {
+	cases := []struct {
+		name string
+		href string
+	}{
+		{"javascript", "javascript:alert(1)"},
+		{"data", "data:text/html,<script>"},
+		{"file", "file:///etc/passwd"},
+		{"scheme-relative", "//evil.example/x"},
+		{"bare path", "/relative/path"},
+		{"ftp", "ftp://example.com/file"},
+		{"empty-after-strip", " "}, // whitespace is non-empty, so current check passes; must still reject
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			yml := "tiles:\n  - {id: x, name: X, href: " + strconv.Quote(c.href) + ", visible_to_groups: [family]}\n"
+			path := t.TempDir() + "/tiles.yaml"
+			if err := os.WriteFile(path, []byte(yml), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err == nil {
+				t.Fatalf("expected error for href %q", c.href)
+			}
+		})
+	}
+}
+
+func TestLoad_AcceptsHTTPAndHTTPS(t *testing.T) {
+	cases := []string{
+		"http://example.com",
+		"https://example.com/x",
+		"https://sub.example.com:8443/path?q=1",
+	}
+	for _, h := range cases {
+		t.Run(h, func(t *testing.T) {
+			yml := "tiles:\n  - {id: x, name: X, href: " + strconv.Quote(h) + ", visible_to_groups: [family]}\n"
+			path := t.TempDir() + "/tiles.yaml"
+			if err := os.WriteFile(path, []byte(yml), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Load(path); err != nil {
+				t.Fatalf("unexpected error for href %q: %v", h, err)
+			}
+		})
 	}
 }
 

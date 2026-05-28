@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -44,6 +45,9 @@ func Load(path string) (*Config, error) {
 		}
 		if t.Href == "" {
 			return nil, fmt.Errorf("config: tile %d (%s): href required", i, t.ID)
+		}
+		if !strings.HasPrefix(t.Href, "http://") && !strings.HasPrefix(t.Href, "https://") {
+			return nil, fmt.Errorf("config: tile %d (%s): href must use http:// or https:// scheme, got %q", i, t.ID, t.Href)
 		}
 	}
 	return &c, nil
