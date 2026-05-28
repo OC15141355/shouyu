@@ -1,0 +1,76 @@
+package templates
+
+import (
+	"strconv"
+	"time"
+
+	"github.com/OC15141355/shouyu/internal/config"
+	"github.com/OC15141355/shouyu/internal/notes"
+)
+
+type HomeData struct {
+	Greeting string
+	Date     string // "wed 14 may"
+	Tiles    []config.Tile
+	Notes    []notes.Note
+}
+
+templ Home(d HomeData) {
+	@Base("Fran", homeBody(d))
+}
+
+templ homeBody(d HomeData) {
+	<div class="screen">
+		<div class="hi">{ d.Greeting }</div>
+		<div class="day">{ d.Date }</div>
+
+		<div class="label">services</div>
+		for _, t := range d.Tiles {
+			<a class="svc" href={ templ.SafeURL(t.Href) }>
+				<span>{ t.Name }</span>
+				<span class="arr">→</span>
+			</a>
+		}
+
+		<div class="rule"></div>
+
+		<div class="label">wall</div>
+		@NotesList(d.Notes)
+
+		<form class="add-note" hx-post="/notes" hx-target="#notes-list" hx-swap="outerHTML">
+			<input name="body" placeholder="add a note…" maxlength="500" required/>
+			<button type="submit">+</button>
+		</form>
+	</div>
+}
+
+templ NotesList(ns []notes.Note) {
+	<div id="notes-list">
+		for _, n := range ns {
+			<div class="note">
+				{ n.Body }
+				<div class="who">
+					{ n.Author } · { humanTime(n.CreatedAt) }
+					<button class="del" hx-delete={ "/notes/" + strconv.FormatInt(n.ID, 10) } hx-target="#notes-list" hx-swap="outerHTML">×</button>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+func humanTime(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Hour:
+		m := int(diff.Minutes())
+		if m < 1 {
+			return "just now"
+		}
+		return strconv.Itoa(m) + "m"
+	case diff < 24*time.Hour:
+		return strconv.Itoa(int(diff.Hours())) + "h"
+	case diff < 7*24*time.Hour:
+		return strconv.Itoa(int(diff.Hours()/24)) + "d"
+	}
+	return t.Format("Jan 2")
+}
