@@ -1,4 +1,4 @@
-package notes
+package noteshttp
 
 import (
 	"context"
@@ -10,10 +10,24 @@ import (
 	"testing"
 
 	"github.com/OC15141355/shouyu/internal/auth"
+	"github.com/OC15141355/shouyu/internal/notes"
 	"github.com/go-chi/chi/v5"
 )
 
-func newTestServer(t *testing.T) (*Handlers, *Repo) {
+func newTestRepo(t *testing.T) *notes.Repo {
+	t.Helper()
+	r, err := notes.NewRepo(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	if err := r.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func newTestServer(t *testing.T) (*Handlers, *notes.Repo) {
 	t.Helper()
 	r := newTestRepo(t)
 	return NewHandlers(r), r
@@ -34,9 +48,9 @@ func TestPostNote_AddsAndReturnsList(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "Milk please") {
 		t.Fatalf("body missing note: %s", w.Body.String())
 	}
-	notes, _ := repo.ListActive(context.Background(), 10)
-	if len(notes) != 1 {
-		t.Fatalf("repo count = %d", len(notes))
+	ns, _ := repo.ListActive(context.Background(), 10)
+	if len(ns) != 1 {
+		t.Fatalf("repo count = %d", len(ns))
 	}
 }
 
@@ -66,9 +80,9 @@ func TestDeleteNote_RemovesAndReturnsEmpty(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
-	notes, _ := repo.ListActive(context.Background(), 10)
-	if len(notes) != 0 {
-		t.Fatalf("not deleted: %+v", notes)
+	ns, _ := repo.ListActive(context.Background(), 10)
+	if len(ns) != 0 {
+		t.Fatalf("not deleted: %+v", ns)
 	}
 }
 

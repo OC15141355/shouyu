@@ -1,13 +1,18 @@
-package notes
+// Package noteshttp wires HTTP handlers for the notes domain. It lives
+// outside internal/notes to keep that package a pure domain/storage layer
+// and to avoid an import cycle with web/templates (which depends on
+// internal/notes for the Note type).
+package noteshttp
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/OC15141355/shouyu/internal/auth"
+	"github.com/OC15141355/shouyu/internal/notes"
+	"github.com/OC15141355/shouyu/web/templates"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -20,10 +25,10 @@ type ctxKeyForTest int
 const authSessionCtxKey ctxKeyForTest = 99
 
 type Handlers struct {
-	repo *Repo
+	repo *notes.Repo
 }
 
-func NewHandlers(r *Repo) *Handlers { return &Handlers{repo: r} }
+func NewHandlers(r *notes.Repo) *Handlers { return &Handlers{repo: r} }
 
 // Post handles POST /notes (htmx form). Returns the updated list partial.
 func (h *Handlers) Post(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +50,16 @@ func (h *Handlers) Post(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderList(w, r)
+	ns, err := h.repo.ListActive(r.Context(), 20)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.NotesList(ns).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 // Delete handles DELETE /notes/{id}. Returns the updated list partial.
@@ -60,22 +74,16 @@ func (h *Handlers) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderList(w, r)
-}
-
-func (h *Handlers) renderList(w http.ResponseWriter, r *http.Request) {
-	notes, err := h.repo.ListActive(r.Context(), 20)
+	ns, err := h.repo.ListActive(r.Context(), 20)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// Minimal HTML for v1 — templ rendering wired in W4.
-	fmt.Fprint(w, `<div id="notes-list">`)
-	for _, n := range notes {
-		fmt.Fprintf(w, `<div class="note">%s<div class="who">%s · %s</div></div>`,
-			escape(n.Body), escape(n.Author), n.CreatedAt.Format("Jan 2"))
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.NotesList(ns).Render(r.Context(), w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
-	fmt.Fprint(w, `</div>`)
 }
 
 func authorFromCtx(ctx context.Context) string {
@@ -89,8 +97,4 @@ func authorFromCtx(ctx context.Context) string {
 		return s.Username
 	}
 	return ""
-}
-
-func escape(s string) string {
-	return strings.NewReplacer("<", "&lt;", ">", "&gt;", "&", "&amp;", `"`, "&quot;").Replace(s)
 }
