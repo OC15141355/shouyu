@@ -69,12 +69,13 @@ func TestPostNote_RejectsEmpty(t *testing.T) {
 
 func TestDeleteNote_RemovesAndReturnsEmpty(t *testing.T) {
 	h, repo := newTestServer(t)
+	// Author and session match — the only path now allowed past the P0-4 gate.
 	id, _ := repo.Add(context.Background(), "x", "y")
 	req := httptest.NewRequest("DELETE", "/notes/"+strconv.FormatInt(id, 10), nil)
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", strconv.FormatInt(id, 10))
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-	req = withSession(req, "z")
+	req = withSession(req, "y")
 	w := httptest.NewRecorder()
 	h.Delete(w, req)
 	if w.Code != http.StatusOK {
@@ -83,6 +84,70 @@ func TestDeleteNote_RemovesAndReturnsEmpty(t *testing.T) {
 	ns, _ := repo.ListActive(context.Background(), 10)
 	if len(ns) != 0 {
 		t.Fatalf("not deleted: %+v", ns)
+	}
+}
+
+func TestDeleteNote_RejectsNonAuthor(t *testing.T) {
+	h, repo := newTestServer(t)
+	// Alice creates a note.
+	id, err := repo.Add(context.Background(), "alice's note", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bob tries to delete it.
+	req := httptest.NewRequest("DELETE", "/notes/"+strconv.FormatInt(id, 10), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.FormatInt(id, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = withSession(req, "bob")
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	// Alice's note is still there.
+	ns, _ := repo.ListActive(context.Background(), 10)
+	if len(ns) != 1 {
+		t.Fatalf("alice's note was deleted — bob bypassed the gate: %+v", ns)
+	}
+}
+
+func TestDeleteNote_AcceptsAuthor(t *testing.T) {
+	h, repo := newTestServer(t)
+	id, err := repo.Add(context.Background(), "alice's note", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("DELETE", "/notes/"+strconv.FormatInt(id, 10), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.FormatInt(id, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = withSession(req, "alice")
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	ns, _ := repo.ListActive(context.Background(), 10)
+	if len(ns) != 0 {
+		t.Fatalf("alice's note not deleted: %+v", ns)
+	}
+}
+
+func TestDeleteNote_NotFoundReturns404(t *testing.T) {
+	h, _ := newTestServer(t)
+	req := httptest.NewRequest("DELETE", "/notes/9999", nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", "9999")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = withSession(req, "alice")
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
 	}
 }
 

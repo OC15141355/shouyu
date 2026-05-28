@@ -6,6 +6,8 @@ package noteshttp
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,11 +65,31 @@ func (h *Handlers) Post(w http.ResponseWriter, r *http.Request) {
 }
 
 // Delete handles DELETE /notes/{id}. Returns the updated list partial.
+//
+// P0-4 ownership gate: only the note's author may delete it. We look up
+// the author first so we can return a precise status — 404 when the row
+// is gone (or never existed), 403 when it exists but belongs to someone
+// else. Without this gate, repo.Delete is a silent no-op for missing
+// rows, so any authenticated family member could delete (or probe)
+// arbitrary notes.
 func (h *Handlers) Delete(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	author, err := h.repo.GetAuthor(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if author != authorFromCtx(r.Context()) {
+		http.Error(w, "not your note", http.StatusForbidden)
 		return
 	}
 	if err := h.repo.Delete(r.Context(), id); err != nil {

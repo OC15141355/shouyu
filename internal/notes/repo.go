@@ -87,6 +87,18 @@ func (r *Repo) Add(ctx context.Context, body, author string) (int64, error) {
 	return id, nil
 }
 
+// GetAuthor returns the author of an active (non-deleted) note.
+// Returns sql.ErrNoRows if id doesn't exist or the row is soft-deleted.
+// Callers (e.g. noteshttp.Delete's P0-4 ownership gate) decide whether
+// that maps to 404 or 403.
+func (r *Repo) GetAuthor(ctx context.Context, id int64) (string, error) {
+	var author string
+	err := r.db.QueryRowContext(ctx,
+		`SELECT author FROM notes WHERE id = ? AND deleted_at IS NULL`,
+		id).Scan(&author)
+	return author, err
+}
+
 func (r *Repo) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE notes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL`,

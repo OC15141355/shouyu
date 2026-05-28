@@ -2,6 +2,8 @@ package notes
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"testing"
 	"time"
 )
@@ -68,6 +70,28 @@ func TestAddTrimsAndRejectsEmpty(t *testing.T) {
 	}
 	if _, err := r.Add(context.Background(), "", "x"); err == nil {
 		t.Fatal("expected error for empty body")
+	}
+}
+
+func TestGetAuthor(t *testing.T) {
+	r := newTestRepo(t)
+	ctx := context.Background()
+	id, _ := r.Add(ctx, "x", "alice")
+	got, err := r.GetAuthor(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "alice" {
+		t.Fatalf("author = %q, want alice", got)
+	}
+	// Non-existent id returns sql.ErrNoRows.
+	if _, err := r.GetAuthor(ctx, 9999); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("want sql.ErrNoRows, got %v", err)
+	}
+	// Soft-deleted row also returns ErrNoRows.
+	_ = r.Delete(ctx, id)
+	if _, err := r.GetAuthor(ctx, id); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("after soft-delete: want sql.ErrNoRows, got %v", err)
 	}
 }
 
