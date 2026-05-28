@@ -1,0 +1,127 @@
+:root {
+  --bg: #0b0b0c;
+  --fg-primary: #e6e6e6;
+  --fg-secondary: #b8b8b8;
+  --fg-tertiary: #4a4a4d;
+  --rule: #1a1a1c;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg-primary);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.screen {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 26px 22px 80px;
+  min-height: 100vh;
+}
+
+.hi {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  margin-bottom: 2px;
+}
+
+.day {
+  color: var(--fg-tertiary);
+  font-size: 11px;
+  margin-bottom: 36px;
+}
+
+.label {
+  color: var(--fg-tertiary);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+
+.svc {
+  font-size: 14px;
+  color: var(--fg-secondary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  text-decoration: none;
+}
+
+.svc .arr {
+  color: var(--fg-tertiary);
+  font-size: 12px;
+}
+
+.rule {
+  height: 1px;
+  background: var(--rule);
+  margin: 16px 0 18px;
+}
+
+.note {
+  font-size: 13px;
+  color: var(--fg-secondary);
+  line-height: 1.5;
+  padding: 10px 0;
+  border-bottom: 1px solid #161618;
+}
+.note:last-child { border-bottom: 0; }
+
+.note .who {
+  color: var(--fg-tertiary);
+  font-size: 10px;
+  margin-top: 4px;
+  letter-spacing: 0.01em;
+  display: flex;
+  justify-content: space-between;
+}
+
+.note .who .del {
+  background: none;
+  border: 0;
+  color: var(--fg-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.add-note {
+  position: fixed;
+  bottom: 16px;
+  left: 22px;
+  right: 22px;
+  max-width: calc(440px - 44px);
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+}
+
+.add-note input {
+  flex: 1;
+  background: #131315;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  color: var(--fg-primary);
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.add-note button {
+  background: #131315;
+  border: 1px solid var(--rule);
+  color: var(--fg-secondary);
+  border-radius: 6px;
+  width: 36px;
+  font-size: 18px;
+  cursor: pointer;
+}
