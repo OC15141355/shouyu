@@ -19,6 +19,13 @@ func newTestRepo(t *testing.T) *Repo {
 	return r
 }
 
+func TestMigrate_IsIdempotent(t *testing.T) {
+	r := newTestRepo(t)
+	if err := r.Migrate(context.Background()); err != nil {
+		t.Fatalf("second migrate must not error (pod restart safety): %v", err)
+	}
+}
+
 func TestAddAndList(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
