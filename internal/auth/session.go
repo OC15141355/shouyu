@@ -72,6 +72,25 @@ func (s *SessionStore) Delete(id string) {
 	s.mu.Unlock()
 }
 
+// GetAndDelete atomically reads + removes a session under a single write
+// lock. Used by Logout to avoid a TOCTOU race between concurrent logouts
+// on the same session: with Get-then-Delete, two goroutines can both
+// observe the session and both attempt deletion. Atomic compose closes
+// the window.
+func (s *SessionStore) GetAndDelete(id string) (Session, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.m[id]
+	if !ok {
+		return Session{}, false
+	}
+	delete(s.m, id)
+	if time.Now().After(sess.Expiry) {
+		return Session{}, false
+	}
+	return sess, true
+}
+
 func (s *SessionStore) evictLoop() {
 	t := time.NewTicker(5 * time.Minute)
 	defer t.Stop()

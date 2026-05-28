@@ -32,6 +32,7 @@ func stubKC(t *testing.T, withRole bool) (*httptest.Server, *rsa.PrivateKey) {
 			"authorization_endpoint": srvURL + "/auth",
 			"token_endpoint":         srvURL + "/token",
 			"jwks_uri":               srvURL + "/jwks",
+			"end_session_endpoint":   srvURL + "/logout",
 			"id_token_signing_alg_values_supported": []string{"RS256"},
 		})
 	})
@@ -179,6 +180,11 @@ func TestLogout_RedirectsToEndSessionWithIDTokenHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Location not a parseable URL: %v (%q)", err, loc)
 	}
+	// Base URL must be the end_session_endpoint from discovery, NOT the
+	// AuthURL fallback. Stub exposes end_session_endpoint at <kc>/logout.
+	if !strings.HasPrefix(loc, kc.URL+"/logout?") {
+		t.Fatalf("Location base = %q, want prefix %q", loc, kc.URL+"/logout?")
+	}
 	q := u.Query()
 	if got := q.Get("id_token_hint"); got != "fake-id-token" {
 		t.Fatalf("id_token_hint = %q, want %q", got, "fake-id-token")
@@ -214,8 +220,18 @@ func TestLogout_NoSessionStillRedirects(t *testing.T) {
 		t.Fatalf("status = %d, want 302", w.Code)
 	}
 	loc := w.Header().Get("Location")
-	if _, err := url.Parse(loc); err != nil {
+	u, err := url.Parse(loc)
+	if err != nil {
 		t.Fatalf("Location not parseable: %v", err)
+	}
+	// id_token_hint MUST be absent when there's no session; we don't want
+	// to leak a stale or empty hint that Keycloak then rejects.
+	if got := u.Query().Get("id_token_hint"); got != "" {
+		t.Fatalf("id_token_hint = %q on no-session logout, want empty", got)
+	}
+	// post_logout_redirect_uri still threaded through.
+	if got := u.Query().Get("post_logout_redirect_uri"); got != "https://home.yagura.dev/" {
+		t.Fatalf("post_logout_redirect_uri = %q, want portal root", got)
 	}
 }
 

@@ -110,10 +110,12 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	var idToken string
 	if c, err := r.Cookie(sessionCookieName); err == nil {
-		if sess, ok := h.store.Get(c.Value); ok {
+		// Atomic read+delete: avoids a TOCTOU race between concurrent
+		// logouts on the same session ID (both would otherwise observe
+		// the session and both attempt deletion).
+		if sess, ok := h.store.GetAndDelete(c.Value); ok {
 			idToken = sess.RawIDToken
 		}
-		h.store.Delete(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, MaxAge: -1, Path: "/"})
 
