@@ -51,12 +51,13 @@ func main() {
 	}
 
 	srv, err := server.New(server.Deps{
-		Provider:  provider,
-		Sessions:  sessions,
-		TilesPath: envOr("TILES_PATH", "/etc/shouyu/tiles.yaml"),
-		NotesRepo: repo,
-		StaticDir: envOr("STATIC_DIR", "web/static"),
-		Loc:       loc,
+		Provider:      provider,
+		Sessions:      sessions,
+		SessionSecret: cfg.SessionSecret,
+		TilesPath:     envOr("TILES_PATH", "/etc/shouyu/tiles.yaml"),
+		NotesRepo:     repo,
+		StaticDir:     envOr("STATIC_DIR", "web/static"),
+		Loc:           loc,
 	})
 	if err != nil {
 		log.Fatalf("server.New: %v", err)

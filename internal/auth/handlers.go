@@ -95,7 +95,7 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    id,
+		Value:    signCookieValue(id, h.p.cfg.SessionSecret),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
@@ -110,11 +110,15 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	var idToken string
 	if c, err := r.Cookie(sessionCookieName); err == nil {
-		// Atomic read+delete: avoids a TOCTOU race between concurrent
-		// logouts on the same session ID (both would otherwise observe
-		// the session and both attempt deletion).
-		if sess, ok := h.store.GetAndDelete(c.Value); ok {
-			idToken = sess.RawIDToken
+		// Verify HMAC before trusting the cookie's id segment; tampered or
+		// stale cookies just fall through to a hint-less end-session redirect.
+		if id, ok := verifyCookieValue(c.Value, h.p.cfg.SessionSecret); ok {
+			// Atomic read+delete: avoids a TOCTOU race between concurrent
+			// logouts on the same session ID (both would otherwise observe
+			// the session and both attempt deletion).
+			if sess, ok := h.store.GetAndDelete(id); ok {
+				idToken = sess.RawIDToken
+			}
 		}
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, MaxAge: -1, Path: "/"})

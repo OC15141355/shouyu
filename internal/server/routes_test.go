@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -60,12 +61,13 @@ func newTestStack(t *testing.T) *Server {
 	}
 	r, _ := newMemNotesRepo(t)
 	srv, err := New(Deps{
-		Provider:  nil, // unused for unauthed routes
-		Sessions:  newEmptySessions(),
-		TilesPath: tilesFile,
-		NotesRepo: r,
-		StaticDir: staticDir,
-		Loc:       time.UTC, // tests use UTC for deterministic greeting bands
+		Provider:      nil, // unused for unauthed routes
+		Sessions:      newEmptySessions(),
+		SessionSecret: strings.Repeat("t", 32),
+		TilesPath:     tilesFile,
+		NotesRepo:     r,
+		StaticDir:     staticDir,
+		Loc:           time.UTC, // tests use UTC for deterministic greeting bands
 	})
 	if err != nil {
 		t.Fatal(err)

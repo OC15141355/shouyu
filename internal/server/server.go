@@ -16,12 +16,17 @@ import (
 )
 
 type Deps struct {
-	Provider  *auth.Provider
-	Sessions  *auth.SessionStore
-	TilesPath string
-	NotesRepo *notes.Repo
-	StaticDir string         // path to web/static
-	Loc       *time.Location // tz for greeting/date rendering (W4.4 pre-survey finding)
+	Provider *auth.Provider
+	Sessions *auth.SessionStore
+	// SessionSecret is the HMAC key used by RequireAuth to verify the
+	// session cookie. Threaded explicitly (rather than read from
+	// Provider.Config()) so tests can construct a stack without a live
+	// OIDC Provider. Production wires it from auth.Config.SessionSecret.
+	SessionSecret string
+	TilesPath     string
+	NotesRepo     *notes.Repo
+	StaticDir     string         // path to web/static
+	Loc           *time.Location // tz for greeting/date rendering (W4.4 pre-survey finding)
 }
 
 type Server struct {
@@ -63,7 +68,7 @@ func New(deps Deps) (*Server, error) {
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir(deps.StaticDir))))
 
 	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAuth(deps.Sessions))
+		r.Use(auth.RequireAuth(deps.Sessions, deps.SessionSecret))
 		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 			home.NewHandler(tilesLoader(), deps.NotesRepo, deps.Loc).ServeHTTP(w, req)
 		})

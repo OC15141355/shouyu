@@ -22,7 +22,8 @@ type Config struct {
 	// RequiredRole, if non-empty, must appear in
 	// id_token.resource_access.<ClientID>.roles for the user to be allowed in.
 	RequiredRole string
-	// SessionSecret is used to sign session cookies. Must be 32+ bytes.
+	// SessionSecret is the HMAC-SHA256 key used to sign session cookies.
+	// Required; must be >= 32 bytes (enforced in validate).
 	SessionSecret string
 }
 
@@ -38,6 +39,9 @@ func (c Config) validate() error {
 	}
 	if c.RedirectURL == "" {
 		return errors.New("auth: RedirectURL required")
+	}
+	if len(c.SessionSecret) < 32 {
+		return errors.New("auth: SessionSecret required (min 32 bytes)")
 	}
 	return nil
 }

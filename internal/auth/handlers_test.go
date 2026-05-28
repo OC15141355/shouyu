@@ -59,7 +59,8 @@ func TestLogin_RedirectsToAuthEndpoint(t *testing.T) {
 	defer kc.Close()
 	p, err := NewProvider(context.Background(), Config{
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
-		RedirectURL: "https://home.yagura.dev/oauth/callback",
+		RedirectURL:   "https://home.yagura.dev/oauth/callback",
+		SessionSecret: strings.Repeat("x", 32),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -90,10 +91,12 @@ func TestLogin_RedirectsToAuthEndpoint(t *testing.T) {
 func TestCallback_AcceptsValidUser(t *testing.T) {
 	kc, _ := stubKC(t, true)
 	defer kc.Close()
+	secret := strings.Repeat("x", 32)
 	p, _ := NewProvider(context.Background(), Config{
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
-		RedirectURL:  kc.URL + "/cb",
-		RequiredRole: "shouyu-user",
+		RedirectURL:   kc.URL + "/cb",
+		RequiredRole:  "shouyu-user",
+		SessionSecret: secret,
 	})
 	store := NewSessionStore(time.Hour)
 	h := NewHandlers(p, store)
@@ -121,7 +124,11 @@ func TestCallback_AcceptsValidUser(t *testing.T) {
 	if sessCookie == nil {
 		t.Fatal("session cookie not set")
 	}
-	if _, ok := store.Get(sessCookie.Value); !ok {
+	id, ok := verifyCookieValue(sessCookie.Value, secret)
+	if !ok {
+		t.Fatalf("session cookie value %q failed HMAC verification", sessCookie.Value)
+	}
+	if _, ok := store.Get(id); !ok {
 		t.Fatal("session not in store")
 	}
 }
@@ -131,8 +138,9 @@ func TestCallback_RejectsMissingRole(t *testing.T) {
 	defer kc.Close()
 	p, _ := NewProvider(context.Background(), Config{
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
-		RedirectURL:  kc.URL + "/cb",
-		RequiredRole: "shouyu-user",
+		RedirectURL:   kc.URL + "/cb",
+		RequiredRole:  "shouyu-user",
+		SessionSecret: strings.Repeat("x", 32),
 	})
 	store := NewSessionStore(time.Hour)
 	h := NewHandlers(p, store)
@@ -153,11 +161,12 @@ func TestCallback_RejectsMissingRole(t *testing.T) {
 func TestLogout_RedirectsToEndSessionWithIDTokenHint(t *testing.T) {
 	kc, _ := stubKC(t, true)
 	defer kc.Close()
+	secret := strings.Repeat("x", 32)
 	p, _ := NewProvider(context.Background(), Config{
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
 		RedirectURL:   "https://home.yagura.dev/oauth/callback",
 		PostLogoutURL: "https://home.yagura.dev/",
-		SessionSecret: "x",
+		SessionSecret: secret,
 		RequiredRole:  "shouyu-user",
 	})
 	store := NewSessionStore(time.Hour)
@@ -168,7 +177,7 @@ func TestLogout_RedirectsToEndSessionWithIDTokenHint(t *testing.T) {
 	store.Put(id, Session{Username: "declan", RawIDToken: "fake-id-token"})
 
 	req := httptest.NewRequest("GET", "/oauth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: signCookieValue(id, secret)})
 	w := httptest.NewRecorder()
 	h.Logout(w, req)
 
@@ -208,6 +217,7 @@ func TestLogout_NoSessionStillRedirects(t *testing.T) {
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
 		RedirectURL:   "https://home.yagura.dev/oauth/callback",
 		PostLogoutURL: "https://home.yagura.dev/",
+		SessionSecret: strings.Repeat("x", 32),
 	})
 	store := NewSessionStore(time.Hour)
 	h := NewHandlers(p, store)
@@ -238,10 +248,12 @@ func TestLogout_NoSessionStillRedirects(t *testing.T) {
 func TestCallback_StoresRawIDToken(t *testing.T) {
 	kc, _ := stubKC(t, true)
 	defer kc.Close()
+	secret := strings.Repeat("x", 32)
 	p, _ := NewProvider(context.Background(), Config{
 		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
-		RedirectURL:  kc.URL + "/cb",
-		RequiredRole: "shouyu-user",
+		RedirectURL:   kc.URL + "/cb",
+		RequiredRole:  "shouyu-user",
+		SessionSecret: secret,
 	})
 	store := NewSessionStore(time.Hour)
 	h := NewHandlers(p, store)
@@ -265,7 +277,11 @@ func TestCallback_StoresRawIDToken(t *testing.T) {
 	if sessCookie == nil {
 		t.Fatal("session cookie not set")
 	}
-	sess, ok := store.Get(sessCookie.Value)
+	id, ok := verifyCookieValue(sessCookie.Value, secret)
+	if !ok {
+		t.Fatalf("session cookie value %q failed HMAC verification", sessCookie.Value)
+	}
+	sess, ok := store.Get(id)
 	if !ok {
 		t.Fatal("session not in store")
 	}
