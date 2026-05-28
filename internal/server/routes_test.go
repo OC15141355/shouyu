@@ -47,6 +47,35 @@ func TestUnauthedRoutesRedirectToLogin(t *testing.T) {
 	}
 }
 
+func TestSecurityHeaders_Present(t *testing.T) {
+	srv := newTestStack(t)
+	// Probe an unauthed path (responds 200) so we see the response headers,
+	// not the redirect.
+	req := httptest.NewRequest("GET", "/healthz", nil)
+	w := httptest.NewRecorder()
+	srv.r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	wantHeaders := map[string]string{
+		"X-Content-Type-Options":    "nosniff",
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"Referrer-Policy":           "no-referrer",
+	}
+	for k, want := range wantHeaders {
+		if got := w.Header().Get(k); got != want {
+			t.Fatalf("%s = %q, want %q", k, got, want)
+		}
+	}
+	csp := w.Header().Get("Content-Security-Policy")
+	for _, directive := range []string{"default-src 'self'", "script-src 'self'", "frame-ancestors 'none'"} {
+		if !strings.Contains(csp, directive) {
+			t.Fatalf("CSP missing directive %q: %q", directive, csp)
+		}
+	}
+}
+
 func newTestStack(t *testing.T) *Server {
 	t.Helper()
 	// Use minimal Deps with a no-op provider, a fresh store, and a temp tiles file.

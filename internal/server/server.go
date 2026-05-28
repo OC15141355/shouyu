@@ -34,11 +34,29 @@ type Server struct {
 	deps Deps
 }
 
+// securityHeaders sets a baseline set of defense-in-depth response headers on
+// every request. CSP is tight ('self'-only) — matches v1's static asset
+// surface (one templ-rendered page, vendored htmx.min.js, vendored style.css,
+// no third-party resources). Loosen only when a real cross-origin asset
+// shows up.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; frame-ancestors 'none'")
+		h.Set("Referrer-Policy", "no-referrer")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func New(deps Deps) (*Server, error) {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
+	r.Use(securityHeaders)
 
 	authH := auth.NewHandlers(deps.Provider, deps.Sessions)
 	notesH := noteshttp.NewHandlers(deps.NotesRepo)
@@ -83,7 +101,10 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           s.r,
+		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
