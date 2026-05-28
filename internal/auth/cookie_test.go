@@ -56,6 +56,58 @@ func TestVerifyCookieValue_MalformedRejected(t *testing.T) {
 	}
 }
 
+func TestVerifyCookieValue_StrictBase64PadBits(t *testing.T) {
+	// Defence against a subtle base64 footgun: for 32-byte signatures,
+	// the 43rd (last) char encodes 4 real bits + 2 pad bits. Without
+	// Strict() decoding, two distinct cookies whose last chars share the
+	// top 4 bits decode to the same 32 bytes — a forgery the HMAC can't
+	// catch.
+	//
+	// b64url alphabet: A-Z=0-25, a-z=26-51, 0-9=52-61, -=62, _=63.
+	// Bit 0 of an encoded char's VALUE (not ASCII) is the LSB pad bit.
+	// We probe ids until we find one whose last char's value has a
+	// non-zero LSB, then construct the colliding twin (zero out the LSB)
+	// and assert it's rejected.
+	secret := strings.Repeat("a", 32)
+	b64Index := func(c byte) int {
+		switch {
+		case c >= 'A' && c <= 'Z':
+			return int(c - 'A')
+		case c >= 'a' && c <= 'z':
+			return int(c-'a') + 26
+		case c >= '0' && c <= '9':
+			return int(c-'0') + 52
+		case c == '-':
+			return 62
+		case c == '_':
+			return 63
+		}
+		return -1
+	}
+	b64Char := func(v int) byte {
+		const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+		return alpha[v]
+	}
+	// Attacker's move: take a legitimate signature (whose last char always
+	// has zero pad bits — that's what the encoder produces) and flip a
+	// pad bit ON. A non-strict decoder discards the pad bits, treats the
+	// forged char as identical to the legit one, decodes to the same 32
+	// bytes, and HMAC verifies. With Strict(), the decoder refuses the
+	// non-zero pad bits up front.
+	id := "abc123"
+	signed := signCookieValue(id, secret)
+	last := signed[len(signed)-1]
+	v := b64Index(last)
+	if v < 0 || v&0x03 != 0 {
+		t.Fatalf("test precondition broken: legit signature last char %q has non-zero pad bits (v=%d)", string(last), v)
+	}
+	twin := b64Char(v | 0x01) // turn on a pad bit
+	mutated := signed[:len(signed)-1] + string(twin)
+	if _, ok := verifyCookieValue(mutated, secret); ok {
+		t.Fatalf("pad-bit-on twin %q accepted (Strict() base64 decode is required); original last=%q twin=%q", mutated, string(last), string(twin))
+	}
+}
+
 func TestVerifyCookieValue_ConstantTimeCompare(t *testing.T) {
 	// We can't directly measure timing in unit tests, but we can document
 	// the contract by asserting that signed.b uses hmac.Equal under the

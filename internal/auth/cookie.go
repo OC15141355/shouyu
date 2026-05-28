@@ -29,7 +29,12 @@ func verifyCookieValue(value, secret string) (string, bool) {
 		return "", false
 	}
 	id, sigB64 := value[:dot], value[dot+1:]
-	sig, err := base64.RawURLEncoding.DecodeString(sigB64)
+	// Strict() rejects encodings where the trailing pad bits aren't zero.
+	// Without it, two distinct cookie strings (e.g. ending in "0" vs "1")
+	// decode to the same 32 bytes, letting an attacker flip a low-order
+	// bit of the encoded signature without changing what HMAC verifies —
+	// silently accepted as a "valid" forgery.
+	sig, err := base64.RawURLEncoding.Strict().DecodeString(sigB64)
 	if err != nil || len(sig) != sha256.Size {
 		return "", false
 	}
