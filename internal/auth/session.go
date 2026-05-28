@@ -9,11 +9,12 @@ import (
 
 // Session is the per-user state held server-side.
 type Session struct {
-	Username string   // preferred_username from claim
-	Name     string   // name claim (display)
-	Email    string   // email claim
-	Groups   []string // groups claim
-	Expiry   time.Time
+	Username   string   // preferred_username from claim
+	Name       string   // name claim (display)
+	Email      string   // email claim
+	Groups     []string // groups claim
+	Expiry     time.Time
+	RawIDToken string // raw OIDC id_token JWT, kept verbatim for RP-initiated logout id_token_hint
 }
 
 // SessionStore is an in-memory store keyed by opaque session ID.

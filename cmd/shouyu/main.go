@@ -23,6 +23,7 @@ func main() {
 		ClientID:      mustEnv("OPENID_CLIENT_ID"),
 		ClientSecret:  mustEnv("OPENID_CLIENT_SECRET"),
 		RedirectURL:   mustEnv("OPENID_CALLBACK_URL"),
+		PostLogoutURL: envOr("OPENID_POST_LOGOUT_URL", "https://home.yagura.dev/"),
 		RequiredRole:  os.Getenv("OPENID_REQUIRED_ROLE"),
 		SessionSecret: mustEnv("SESSION_SECRET"),
 	}

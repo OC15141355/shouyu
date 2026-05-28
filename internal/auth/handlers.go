@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 )
@@ -86,10 +87,11 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 	}
 	id := h.store.NewID()
 	h.store.Put(id, Session{
-		Username: claims.Username,
-		Name:     claims.Name,
-		Email:    claims.Email,
-		Groups:   claims.Groups,
+		Username:   claims.Username,
+		Name:       claims.Name,
+		Email:      claims.Email,
+		Groups:     claims.Groups,
+		RawIDToken: rawID,
 	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
@@ -106,11 +108,17 @@ func (h *Handlers) Callback(w http.ResponseWriter, r *http.Request) {
 
 // Logout kills the local session and redirects to Keycloak end-session.
 func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
+	var idToken string
 	if c, err := r.Cookie(sessionCookieName); err == nil {
+		if sess, ok := h.store.Get(c.Value); ok {
+			idToken = sess.RawIDToken
+		}
 		h.store.Delete(c.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, MaxAge: -1, Path: "/"})
-	endSession := h.p.oidc.Endpoint().AuthURL // fallback if no end_session present
+
+	// Discover the end-session endpoint from the OIDC provider's metadata.
+	endSession := h.p.oidc.Endpoint().AuthURL // fallback if discovery doesn't expose end_session
 	var disc struct {
 		EndSession string `json:"end_session_endpoint"`
 	}
@@ -118,7 +126,22 @@ func (h *Handlers) Logout(w http.ResponseWriter, r *http.Request) {
 	if disc.EndSession != "" {
 		endSession = disc.EndSession
 	}
-	http.Redirect(w, r, endSession+"?post_logout_redirect_uri="+h.p.cfg.RedirectURL, http.StatusFound)
+
+	// Build the query via net/url.Values so the redirect URI + id_token_hint
+	// are properly percent-encoded.
+	q := url.Values{}
+	if h.p.cfg.PostLogoutURL != "" {
+		q.Set("post_logout_redirect_uri", h.p.cfg.PostLogoutURL)
+	}
+	if idToken != "" {
+		// Keycloak 26.x requires id_token_hint for silent RP-initiated logout;
+		// without it Keycloak renders a confirmation prompt.
+		q.Set("id_token_hint", idToken)
+	}
+	if enc := q.Encode(); enc != "" {
+		endSession += "?" + enc
+	}
+	http.Redirect(w, r, endSession, http.StatusFound)
 }
 
 // silence unused

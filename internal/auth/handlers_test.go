@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,115 @@ func TestCallback_RejectsMissingRole(t *testing.T) {
 
 	if cbW.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", cbW.Code, cbW.Body.String())
+	}
+}
+
+func TestLogout_RedirectsToEndSessionWithIDTokenHint(t *testing.T) {
+	kc, _ := stubKC(t, true)
+	defer kc.Close()
+	p, _ := NewProvider(context.Background(), Config{
+		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
+		RedirectURL:   "https://home.yagura.dev/oauth/callback",
+		PostLogoutURL: "https://home.yagura.dev/",
+		SessionSecret: "x",
+		RequiredRole:  "shouyu-user",
+	})
+	store := NewSessionStore(time.Hour)
+	h := NewHandlers(p, store)
+
+	// Simulate completed login: stash a session with a raw ID token.
+	id := store.NewID()
+	store.Put(id, Session{Username: "declan", RawIDToken: "fake-id-token"})
+
+	req := httptest.NewRequest("GET", "/oauth/logout", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
+	w := httptest.NewRecorder()
+	h.Logout(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("Location not a parseable URL: %v (%q)", err, loc)
+	}
+	q := u.Query()
+	if got := q.Get("id_token_hint"); got != "fake-id-token" {
+		t.Fatalf("id_token_hint = %q, want %q", got, "fake-id-token")
+	}
+	if got := q.Get("post_logout_redirect_uri"); got != "https://home.yagura.dev/" {
+		t.Fatalf("post_logout_redirect_uri = %q, want portal root", got)
+	}
+	// Verify session is deleted.
+	if _, ok := store.Get(id); ok {
+		t.Fatal("session not deleted on logout")
+	}
+}
+
+func TestLogout_NoSessionStillRedirects(t *testing.T) {
+	// If the cookie is missing or stale, Logout should still redirect to the
+	// end-session endpoint (just without id_token_hint). UX: a stale tab
+	// clicking "logout" shouldn't 500.
+	kc, _ := stubKC(t, true)
+	defer kc.Close()
+	p, _ := NewProvider(context.Background(), Config{
+		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
+		RedirectURL:   "https://home.yagura.dev/oauth/callback",
+		PostLogoutURL: "https://home.yagura.dev/",
+	})
+	store := NewSessionStore(time.Hour)
+	h := NewHandlers(p, store)
+
+	req := httptest.NewRequest("GET", "/oauth/logout", nil)
+	w := httptest.NewRecorder()
+	h.Logout(w, req)
+
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", w.Code)
+	}
+	loc := w.Header().Get("Location")
+	if _, err := url.Parse(loc); err != nil {
+		t.Fatalf("Location not parseable: %v", err)
+	}
+}
+
+func TestCallback_StoresRawIDToken(t *testing.T) {
+	kc, _ := stubKC(t, true)
+	defer kc.Close()
+	p, _ := NewProvider(context.Background(), Config{
+		IssuerURL: kc.URL, ClientID: "shouyu", ClientSecret: "x",
+		RedirectURL:  kc.URL + "/cb",
+		RequiredRole: "shouyu-user",
+	})
+	store := NewSessionStore(time.Hour)
+	h := NewHandlers(p, store)
+
+	// Drive a successful login flow (mirrors TestCallback_AcceptsValidUser).
+	loginW := httptest.NewRecorder()
+	h.Login(loginW, httptest.NewRequest("GET", "/oauth/login", nil))
+	stateCookie := loginW.Result().Cookies()[0]
+	cbReq := httptest.NewRequest("GET", "/oauth/callback?state="+stateCookie.Value+"&code=fake", nil)
+	cbReq.AddCookie(stateCookie)
+	cbW := httptest.NewRecorder()
+	h.Callback(cbW, cbReq)
+
+	// Extract the session and check RawIDToken is populated.
+	var sessCookie *http.Cookie
+	for _, c := range cbW.Result().Cookies() {
+		if c.Name == sessionCookieName {
+			sessCookie = c
+		}
+	}
+	if sessCookie == nil {
+		t.Fatal("session cookie not set")
+	}
+	sess, ok := store.Get(sessCookie.Value)
+	if !ok {
+		t.Fatal("session not in store")
+	}
+	if sess.RawIDToken == "" {
+		t.Fatal("RawIDToken not stored on session")
 	}
 }
 

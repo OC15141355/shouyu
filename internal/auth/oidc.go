@@ -15,6 +15,10 @@ type Config struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string // full URL, e.g. https://home.yagura.dev/oauth/callback
+	// PostLogoutURL is the RP-initiated logout target (default
+	// https://home.yagura.dev/). Empty disables hint inclusion in the
+	// end-session redirect; validation does not require it.
+	PostLogoutURL string
 	// RequiredRole, if non-empty, must appear in
 	// id_token.resource_access.<ClientID>.roles for the user to be allowed in.
 	RequiredRole string
