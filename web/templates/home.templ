@@ -9,14 +9,15 @@ import (
 )
 
 type HomeData struct {
-	Greeting string
-	Date     string // "wed 14 may"
-	Tiles    []config.Tile
-	Notes    []notes.Note
+	BrandName string
+	Greeting  string
+	Date      string // "wed 14 may"
+	Tiles     []config.Tile
+	Notes     []notes.Note
 }
 
 templ Home(d HomeData) {
-	@Base("Fran", homeBody(d))
+	@Base(d.BrandName, homeBody(d))
 }
 
 templ homeBody(d HomeData) {

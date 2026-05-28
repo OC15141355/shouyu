@@ -41,10 +41,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := templates.HomeData{
-		Greeting: greeting.Greet(sess.Username, now),
-		Date:     strings.ToLower(now.Format("Mon 2 Jan")),
-		Tiles:    tiles,
-		Notes:    ns,
+		BrandName: h.cfg.Brand.Name,
+		Greeting:  greeting.Greet(sess.Username, now),
+		Date:      strings.ToLower(now.Format("Mon 2 Jan")),
+		Tiles:     tiles,
+		Notes:     ns,
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.Home(d).Render(r.Context(), w); err != nil {

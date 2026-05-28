@@ -49,6 +49,34 @@ func TestHomeRenders(t *testing.T) {
 	}
 }
 
+func TestHomeRenders_UsesBrandFromConfig(t *testing.T) {
+	repo, _ := notes.NewRepo(":memory:")
+	t.Cleanup(func() { _ = repo.Close() })
+	_ = repo.Migrate(context.Background())
+
+	cfg := &config.Config{
+		Brand: config.Brand{Name: "Mochi"},
+		Tiles: []config.Tile{},
+	}
+	h := NewHandler(cfg, repo, time.UTC)
+	req := httptest.NewRequest("GET", "/", nil)
+	ctx := context.WithValue(req.Context(), authCtxOverride, auth.Session{Username: "declan", Groups: []string{"family"}})
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d", w.Code)
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "<title>Mochi</title>") {
+		t.Fatalf("title not 'Mochi': %s", body)
+	}
+	if strings.Contains(body, "<title>Fran</title>") {
+		t.Fatal("hard-coded 'Fran' leaked into title")
+	}
+}
+
 // TestHomeRedirectsWithoutSession proves the if-no-session-then-redirect branch
 // is genuinely live — mirrors W1.4's TestRequireAuth_NoCookie_RedirectsToLogin
 // discipline. The last line of defense if RequireAuth ever gets bypassed
