@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"reflect"
 	"testing"
@@ -33,8 +34,8 @@ func TestLoad_FileNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !os.IsNotExist(err) && err == nil {
-		t.Fatalf("want not-exist style error")
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("want not-exist error, got %v", err)
 	}
 }
 
