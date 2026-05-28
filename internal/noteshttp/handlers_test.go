@@ -151,6 +151,34 @@ func TestDeleteNote_NotFoundReturns404(t *testing.T) {
 	}
 }
 
+// TestDeleteNote_NoSession_Returns401 proves the handler enforces its own
+// session check rather than relying on auth.RequireAuth middleware ordering.
+// Defense-in-depth: a future router refactor that accidentally bypasses the
+// middleware would still hit this gate.
+func TestDeleteNote_NoSession_Returns401(t *testing.T) {
+	h, repo := newTestServer(t)
+	id, err := repo.Add(context.Background(), "alice's note", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("DELETE", "/notes/"+strconv.FormatInt(id, 10), nil)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.FormatInt(id, 10))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	// NO withSession call — request has no Session in ctx.
+	w := httptest.NewRecorder()
+	h.Delete(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+	// Note still alive.
+	ns, _ := repo.ListActive(context.Background(), 10)
+	if len(ns) != 1 {
+		t.Fatalf("note deleted without session — gate bypassed: %+v", ns)
+	}
+}
+
 func withSession(r *http.Request, username string) *http.Request {
 	ctx := context.WithValue(r.Context(), authSessionCtxKey, auth.Session{Username: username})
 	return r.WithContext(ctx)

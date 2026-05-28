@@ -76,7 +76,10 @@ func TestAddTrimsAndRejectsEmpty(t *testing.T) {
 func TestGetAuthor(t *testing.T) {
 	r := newTestRepo(t)
 	ctx := context.Background()
-	id, _ := r.Add(ctx, "x", "alice")
+	id, err := r.Add(ctx, "x", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
 	got, err := r.GetAuthor(ctx, id)
 	if err != nil {
 		t.Fatal(err)

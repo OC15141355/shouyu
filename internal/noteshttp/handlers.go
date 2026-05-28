@@ -79,6 +79,14 @@ func (h *Handlers) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
+	requester := authorFromCtx(r.Context())
+	if requester == "" {
+		// Defense-in-depth: handler enforces its own session check so the
+		// authorization gate is safe-in-isolation regardless of middleware
+		// ordering. Mirrors the Post pattern above.
+		http.Error(w, "no session", http.StatusUnauthorized)
+		return
+	}
 	author, err := h.repo.GetAuthor(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -88,7 +96,7 @@ func (h *Handlers) Delete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if author != authorFromCtx(r.Context()) {
+	if author != requester {
 		http.Error(w, "not your note", http.StatusForbidden)
 		return
 	}
