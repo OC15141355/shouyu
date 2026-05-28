@@ -1,0 +1,21 @@
+# Go build artefacts
+shouyu
+*.exe
+*.test
+*.out
+coverage.out
+dist/
+
+# Local data
+*.db
+*.db-journal
+data/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Generated templ artifacts: we commit *_templ.go for reproducible builds (no codegen in CI).
+# If you'd rather generate-on-build, uncomment: web/templates/*_templ.go
