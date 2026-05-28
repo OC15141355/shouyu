@@ -24,7 +24,7 @@ func main() {
 		ClientSecret:  mustEnv("OPENID_CLIENT_SECRET"),
 		RedirectURL:   mustEnv("OPENID_CALLBACK_URL"),
 		PostLogoutURL: envOr("OPENID_POST_LOGOUT_URL", "https://home.yagura.dev/"),
-		RequiredRole:  os.Getenv("OPENID_REQUIRED_ROLE"),
+		RequiredRole:  mustEnv("OPENID_REQUIRED_ROLE"),
 		SessionSecret: mustEnv("SESSION_SECRET"),
 	}
 	loc, err := time.LoadLocation(envOr("PORTAL_TZ", "Australia/Sydney"))
