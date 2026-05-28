@@ -1,31 +1,88 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-	// Blank imports pin core deps in go.mod until W1+ wires real imports.
-	// Remove these as each dep gets a real consumer.
-	_ "github.com/a-h/templ"
-	_ "github.com/coreos/go-oidc/v3/oidc"
-	_ "github.com/go-chi/chi/v5"
-	_ "golang.org/x/oauth2"
-	_ "gopkg.in/yaml.v3"
-	_ "modernc.org/sqlite"
+	// Embed the IANA zone db in the binary so distroless/static works
+	// without a tzdata layer. ~500KB binary cost. W4.4 pre-survey finding.
+	_ "time/tzdata"
+
+	"github.com/OC15141355/shouyu/internal/auth"
+	"github.com/OC15141355/shouyu/internal/notes"
+	"github.com/OC15141355/shouyu/internal/server"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	cfg := auth.Config{
+		IssuerURL:     mustEnv("OPENID_ISSUER_URL"),
+		ClientID:      mustEnv("OPENID_CLIENT_ID"),
+		ClientSecret:  mustEnv("OPENID_CLIENT_SECRET"),
+		RedirectURL:   mustEnv("OPENID_CALLBACK_URL"),
+		RequiredRole:  os.Getenv("OPENID_REQUIRED_ROLE"),
+		SessionSecret: mustEnv("SESSION_SECRET"),
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
+	loc, err := time.LoadLocation(envOr("PORTAL_TZ", "Australia/Sydney"))
+	if err != nil {
+		log.Fatalf("time.LoadLocation: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	provider, err := auth.NewProvider(ctx, cfg)
+	if err != nil {
+		log.Fatalf("auth.NewProvider: %v", err)
+	}
+	sessions := auth.NewSessionStore(24 * time.Hour)
+
+	dbPath := envOr("DB_PATH", "/data/shouyu.db")
+	repo, err := notes.NewRepo(dbPath)
+	if err != nil {
+		log.Fatalf("notes.NewRepo: %v", err)
+	}
+	defer func() { _ = repo.Close() }()
+	if err := repo.Migrate(ctx); err != nil {
+		log.Fatalf("notes.Migrate: %v", err)
+	}
+
+	srv, err := server.New(server.Deps{
+		Provider:  provider,
+		Sessions:  sessions,
+		TilesPath: envOr("TILES_PATH", "/etc/shouyu/tiles.yaml"),
+		NotesRepo: repo,
+		StaticDir: envOr("STATIC_DIR", "web/static"),
+		Loc:       loc,
 	})
-	log.Printf("shouyu listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
-		log.Fatal(err)
+	if err != nil {
+		log.Fatalf("server.New: %v", err)
 	}
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
+	go func() { <-sigc; cancel() }()
+
+	addr := ":" + envOr("PORT", "8080")
+	log.Printf("shouyu listening on %s", addr)
+	if err := srv.ListenAndServe(ctx, addr); err != nil {
+		log.Fatalf("listen: %v", err)
+	}
+}
+
+func mustEnv(k string) string {
+	v := os.Getenv(k)
+	if v == "" {
+		log.Fatalf("required env %s not set", k)
+	}
+	return v
+}
+
+func envOr(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }
