@@ -1,0 +1,4 @@
+tiles:
+  - id: broken
+    name: Broken
+    visible_to_groups: [family]

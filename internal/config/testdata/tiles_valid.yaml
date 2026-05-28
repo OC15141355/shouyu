@@ -1,0 +1,14 @@
+brand:
+  name: Fran
+  greeting_style: family
+tiles:
+  - id: fran
+    name: Fran
+    description: AI chat
+    href: https://fran.yagura.dev
+    visible_to_groups: [family]
+  - id: jellyfin
+    name: Jellyfin
+    description: Movies & TV
+    href: https://jellyfin.yagura.dev
+    visible_to_groups: [family]
