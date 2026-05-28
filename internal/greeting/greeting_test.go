@@ -41,8 +41,8 @@ func TestGreetWeekendSpecial(t *testing.T) {
 	loc, _ := time.LoadLocation("Australia/Sydney")
 	sat := time.Date(2026, 5, 16, 10, 0, 0, 0, loc)
 	got := Greet("declan", sat)
-	if !strings.Contains(got, "weekend") && !strings.Contains(got, "Saturday") {
-		t.Fatalf("Saturday didn't surface weekend/Saturday: %q", got)
+	if !strings.Contains(got, "Happy weekend") {
+		t.Fatalf("Saturday didn't surface 'Happy weekend': %q", got)
 	}
 }
 
